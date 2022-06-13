@@ -1,57 +1,94 @@
-int v0,v1,v2,v3;
+#define NOP __asm__ __volatile__ ("nop\n\t")
+#include <WDT.h>
+#include <avr/sleep.h>
+
+
+int readAvgVolt(int pin){
+  long sum = 0;
+  for(int x=0;x<16;x++)
+    sum += analogRead(pin);
+  return (int)((sum+8)/16);
+}
 
 void setup() {
-  // setup Timer 1
+  delay(200);
+  pinMode(A0, INPUT_PULLUP);
+  analogReference(DEFAULT);
   pinMode(LED_BUILTIN, OUTPUT);
-  Serial.begin(115200);
-  Serial.println("Serial started!");
+  Serial.begin(115200, SERIAL_8N1);
+  Serial.println("Initialization complete:");
+  Serial.flush();
 
-  v0=0;
-  if(v0&1)Serial.println("Nonsense");
-  Serial.println(v0);
+  char old_PMCR = PMCR;
 
-  cli();
-  TCCR1A = 0;
-  TCCR1B = 0b00001001;
-  TCNT1  = 0;
-  OCR1A = 0xffff;
-  TIMSK1 |= (1 << OCIE1A);
+  PMCR = 0b10000000;
+  PMCR = 0b01010010;
 
-  v0=TCNT1;
-  v1=TCNT1;
-  char pin = PIND&8?1:0;
-  v2=TCNT1;
-  
-  sei();
-  Serial.println(v0);
-  Serial.println(v1);
-  Serial.println(v2);
-  Serial.print("pin=");
-  Serial.println((int)pin);
-  while(1);
-}
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
 
-boolean toggle1 = 1;
-int cnt=0;
+  PRR = 0b11101110;
+  PRR1 = 0x2e;
 
-ISR(TIMER1_COMPA_vect){//timer1 interrupt 1Hz toggles pin 13 (LED)
-  if (toggle1){
-    digitalWrite(LED_BUILTIN, HIGH);
-    toggle1 = 0;
-    Serial.print("0");
-  }else{
-    digitalWrite(LED_BUILTIN, LOW);
-    toggle1 = 1;
-    Serial.print("1");
-    cnt+=1;
-    if(cnt==5){
-      TIMSK1 = 0;
-      Serial.println("disable");
-    }
+  uint16_t Vs[10];
+  for(int x=0;x<10;x++){
+    Vs[x] = readAvgVolt(A0);
+    digitalWrite(LED_BUILTIN, 1);
+    for(int y=0;y<5000;y++)NOP;
+    digitalWrite(LED_BUILTIN, 0);
+    for(int y=0;y<5000;y++)NOP;
   }
+
+  PMCR = 0b10000000;
+  PMCR = old_PMCR;
+
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+  NOP;
+
+  PRR=PRR1=0;
+  Serial.println("wake-up complete");
+
+  for(int x=0;x<10;x++)
+    Serial.println(Vs[x]);
+
 }
+
 
 void loop() {
+  digitalWrite(LED_BUILTIN, 1);
+  delay(250);
+  digitalWrite(LED_BUILTIN, 0);
+  delay(250);
+  Serial.println(readAvgVolt(A0));
   // put your main code here, to run repeatedly:
-
+//  wdt_enable(WDTO_4S);
+//  Serial.println(WDTCSR, BIN);
+//  Serial.flush();
+//  WDTCSR = 0b01000110;
+//  wdt_reset();
+//  PRR = 0xef;
+//  PRR1 = 0x0e;
+//  SMCR = 0b00001101;
+//  sleep_cpu();
+//  PRR = PRR1 = 0;
+//  sleep_disable();
+//  SMCR = 0;
+//  wdt_reset();
+//  wdt_disable();
+//
+//  digitalWrite(LED_BUILTIN,1);
+//
+//  while(1);
 }
