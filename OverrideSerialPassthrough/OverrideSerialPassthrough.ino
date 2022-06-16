@@ -12,22 +12,43 @@
 
 //CustomSoftwareSerial Serial1(10, 11);
 
-void setup() {
-  Serial.begin(115200, SERIAL_8N1);
-  //Serial1.begin(115200, CSERIAL_8N1);
-  Serial.println("Custom software serial passthrough started on PIN 0 and PIN 1");
+void sensor_on(){
+  HDR = 1;
+  digitalWrite(D5, 1);
 }
 
-void loop() {
-  if (Serial.available()) {      // If anything comes in Serial PIN 0
-    Serial.write(Serial.read());   // read it and send it out Serial PIN 1
-  }
+void setup() {
+  delay(200);
   
-//  if (Serial.available()) {      // If anything comes in Serial PIN 0 (PC USB)
-//    Serial1.write(Serial.read());   // read it and send it out Serial1 PIN 11
-//  }
+  // avoid floating ports
+  for(int x=D2; x<=D13; x++){
+    pinMode(x, OUTPUT);
+    digitalWrite(x, 0);
+  }
+  for(int x=A0; x<=A7; x++){
+    pinMode(x, OUTPUT);
+    digitalWrite(x, 0);
+  }
 
-//  if (Serial1.available()) {     // If anything comes in Serial1 PIN 10
-//    Serial.write(Serial1.read());   // read it and send it out Serial PIN 1 (PC USB)
-//  }
+  Serial.begin(115200, SERIAL_8N1);
+  Serial.println("Custom software serial passthrough started on PIN 0 and PIN 1");
+  sensor_on();
+}
+
+int cnt=0;
+void loop() {
+  if(false){
+    if (Serial.available()) {
+      Serial.print(Serial.read(), HEX);
+      Serial.print(" ");
+      if(++cnt>=16){
+        Serial.println("");
+        cnt = 0;
+      }
+    }
+  } else {
+    if (Serial.available()) {      // If anything comes in Serial PIN 0
+      Serial.write(Serial.read());   // read it and send it out Serial PIN 1
+    }
+  }
 }

@@ -5,9 +5,9 @@
 
 int readAvgVolt(int pin){
   long sum = 0;
-  for(int x=0;x<16;x++)
+  for(int x=0;x<8;x++)
     sum += analogRead(pin);
-  return (int)((sum+8)/16);
+  return (int)((sum+4)/8);
 }
 
 void setup() {
@@ -34,7 +34,7 @@ void setup() {
   NOP;
 
   PRR = 0b11101110;
-  PRR1 = 0x2e;
+  PRR1 = 0b00101110;
 
   uint16_t Vs[10];
   for(int x=0;x<10;x++){
