@@ -8,20 +8,21 @@
 #include <WDT.h>
 #include <avr/sleep.h>
 
-#define DEBUG 1
-#define LIGHT_TH_LOW  1600
-#define LIGHT_TH_HIGH 1800
+#define LIGHT_TH_LOW  3000
+#define LIGHT_TH_HIGH 3200
 #define DELAY_ON_MOV  30000
 #define DELAY_ON_OCC  20000
-#define OCC_TRIG_TH  2000
-#define OCC_CONT_TH  0
-#define MOV_TRIG_TH  0
-#define MOV_CONT_TH  0
+#define OCC_TRIG_TH  65530
+#define OCC_CONT_TH  500
+#define MOV_TRIG_TH  500
+#define MOV_CONT_TH  250
 #define CHECK_INTERVAL  125   // N*0.032 sec
 
 uint16_t adc_value;
 bool is_light_on = false;
+bool DEBUG = false;
 extern volatile unsigned long timer0_millis;
+int sleep_cnter=0;
 
 void tx_to_pd6(char *str){
   char old = PMX0;
@@ -46,20 +47,20 @@ void sensor_off(){
 
 inline void light_on(){
   digitalWrite(D3, 1);
-#ifdef DEBUG
-  digitalWrite(LED_BUILTIN, 1);
-  Serial.println("Light on");
-  Serial.flush();
-#endif
+  if(DEBUG){
+    digitalWrite(LED_BUILTIN, 1);
+    Serial.println("Light on");
+    Serial.flush();
+  }
 }
 
 inline void light_off(){
   digitalWrite(D3, 0);
-#ifdef DEBUG
-  digitalWrite(LED_BUILTIN, 0);
-  Serial.println("Light off");
-  Serial.flush();
-#endif
+  if(DEBUG){
+    digitalWrite(LED_BUILTIN, 0);
+    Serial.println("Light off");
+    Serial.flush();
+  }
 }
 
 int readAvgVolt(int pin){
@@ -83,14 +84,61 @@ void setup() {
     digitalWrite(x, 0);
   }
 
+  // reuse RESET button as toggle DEBUG mode
+  pinMode(PC6, INPUT_PULLUP);
+  PMX2 |= 0b10000000;
+  PMX2 |= 1;
+  PCICR |= (1<<PCIE1);
+  PCMSK1 |= (1<<PCINT14);
+
   // setup ambient light sensor
   pinMode(A0, INPUT_PULLUP);
   analogReference(DEFAULT);
   
   Serial.begin(115200);
-  Serial.print("System initialized, light sensor = ");
+  Serial.print("\nSystem initialized, light sensor = ");
   Serial.println(readAvgVolt(A0));
+  Serial.println("Press RESET button to toggle DEBUG/verbose mode; long-press RESET to restore reset functionality.");
   Serial.flush();
+  delay(800);
+}
+
+char pc_int_cnt = 0;
+unsigned long last_press = 0;
+ISR(PCINT1_vect){
+  cli();
+  if(TIMSK2&0b00000010){
+    if((++pc_int_cnt)&1)
+      last_press = sleep_cnter;
+    else{
+      if(sleep_cnter!=last_press){  // long-click restore RESET button
+        PCICR &= ~(1<<PCIE1);
+        PCMSK1 &= ~(1<<PCINT14);
+        PMX2 |= 0b10000000;
+        PMX2 &= ~1;
+        pinMode(PC6, OUTPUT);
+        DEBUG = false;
+      }
+      DEBUG = !DEBUG;
+      digitalWrite(LED_BUILTIN, DEBUG&&is_light_on);
+    }
+  }else{
+    if((++pc_int_cnt)&1)
+      last_press = millis();
+    else{
+      if(millis()-last_press>1000){  // long-click restore RESET button
+        PCICR &= ~(1<<PCIE1);
+        PCMSK1 &= ~(1<<PCINT14);
+        PMX2 |= 0b10000000;
+        PMX2 &= ~1;
+        pinMode(PC6, OUTPUT);
+        DEBUG = false;
+      }
+      DEBUG = !DEBUG;
+      digitalWrite(LED_BUILTIN, DEBUG&&is_light_on);
+    }
+  }
+  sei();
 }
 
 ISR(TIMER2_COMPA_vect){
@@ -108,10 +156,10 @@ int parse_output_value(String s){
 void loop() {
   // A. check light sensor
   if(readAvgVolt(A0)<LIGHT_TH_HIGH){
-#ifdef DEBUG
+    if(DEBUG){
         Serial.println("Entering sleep ...");
         Serial.flush();
-#endif
+    }
     // enter slow clock
     char old_PMCR = PMCR;
 
@@ -128,7 +176,7 @@ void loop() {
     NOP;
 
     PRR = 0b10101110;
-    PRR1 = 0b00101110;
+    PRR1 = 0b00101100;
 
     // setup Timer2 interrupt every 4 sec
     cli();
@@ -142,17 +190,15 @@ void loop() {
     sei();
 
     // sleep check
-    int x=0;
     do{
       SMCR = 0b00000111;
       sleep_cpu();
-#ifdef DEBUG
-      digitalWrite(LED_BUILTIN, (++x)&1);
-#endif
+      if(DEBUG)
+        digitalWrite(LED_BUILTIN, (++sleep_cnter)&1);
     }while(readAvgVolt(A0)<LIGHT_TH_HIGH);
-#ifdef DEBUG
-    digitalWrite(LED_BUILTIN, 0);
-#endif
+
+    if(DEBUG)
+      digitalWrite(LED_BUILTIN, 0);
 
     // return to fast clock
     TIMSK2 = 0;
@@ -169,10 +215,10 @@ void loop() {
     NOP;
 
     PRR=PRR1=0;
-#ifdef DEBUG
-    Serial.println("Exited sleep ...");
-    Serial.flush();
-#endif    
+    if(DEBUG){
+      Serial.println("Exited sleep ...");
+      Serial.flush();
+    }
   }
 
 
@@ -192,9 +238,7 @@ void loop() {
     if(is_light_on){  // when light is on
       if(Serial.available()){
         String s = Serial.readStringUntil('\n');
-#ifdef DEBUG
-        Serial.println(s);
-#endif
+        if(DEBUG) Serial.println(s);
         if(s.startsWith("mov") && parse_output_value(s)>=MOV_CONT_TH){
           ul = millis()+DELAY_ON_MOV;
         }else if(s.startsWith("occ") && parse_output_value(s)>=OCC_CONT_TH){
@@ -210,9 +254,7 @@ void loop() {
     }else{  // when light is off
       if(Serial.available()){
         String s = Serial.readStringUntil('\n');
-#ifdef DEBUG
-        Serial.println(s);
-#endif
+        if(DEBUG) Serial.println(s);
         if((s.startsWith("mov") && parse_output_value(s)>=MOV_TRIG_TH)
          || (s.startsWith("occ") && parse_output_value(s)>=OCC_TRIG_TH)){
           light_on();

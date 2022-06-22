@@ -23,6 +23,12 @@ void setup() {
     digitalWrite(x, 0);
   }
 
+  pinMode(PC6, INPUT_PULLUP);
+  PMX2 |= 0b10000000;
+  PMX2 |= 1;
+  PCICR |= (1<<PCIE1);
+  PCMSK1 |= (1<<PCINT14);
+
   Serial.begin(115200, SERIAL_8N1);
 
   // setup ambient light sensor
@@ -30,6 +36,26 @@ void setup() {
   analogReference(DEFAULT);
 
   Serial.println("Started:");
+}
+
+bool DEBUG = false;
+char pc_int_cnt = 0;
+unsigned long last_press = 0;
+ISR(PCINT1_vect){
+  cli();
+  if((++pc_int_cnt)&1)
+    last_press = millis();
+  else{
+    if(millis()-last_press>1000){  // long-click restore RESET button
+      PCICR &= ~(1<<PCIE1);
+      PCMSK1 &= ~(1<<PCINT14);
+      PMX2 |= 0b10000000;
+      PMX2 &= ~1;
+      pinMode(PC6, OUTPUT);
+    }
+    DEBUG = !DEBUG;
+  }
+  sei();
 }
 
 void loop(){
@@ -42,5 +68,6 @@ void loop(){
       digitalWrite(D3, 0);
       digitalWrite(LED_BUILTIN, 0);
     }
+    Serial.println(DEBUG?"DEBUG is on":"DEBUG is off");
     delay(1000);
 }
