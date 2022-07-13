@@ -1,73 +1,50 @@
-#define NOP __asm__ __volatile__ ("nop\n\t")
-#include <WDT.h>
-#include <avr/sleep.h>
-
-int readAvgVolt(int pin){
-  long sum = 0;
-  for(int x=0;x<8;x++)
-    sum += analogRead(pin);
-  return (int)((sum+4)/8);
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266WebServer.h>
+/* Set these to your desired credentials. */
+const char *ssid = "WXC"; //Enter your WIFI ssid
+const char *password = "2020hallelujah"; //Enter your WIFI password
+ESP8266WebServer server(80);
+void handleRoot() {
+ server.send(200, "text/html", "<form action=\"/LED_BUILTIN_on\" method=\"get\" id=\"form1\"></form><button type=\"submit\" form=\"form1\" value=\"On\">On</button><form action=\"/LED_BUILTIN_off\" method=\"get\" id=\"form2\"></form><button type=\"submit\" form=\"form2\" value=\"Off\">Off</button>");
 }
-
+void handleSave() {
+ if (server.arg("pass") != "") {
+   Serial.println(server.arg("pass"));
+ }
+}
 void setup() {
-  // 0. Initialize
-  delay(200); // avoid soft brick
-  
-  // avoid floating ports
-  for(int x=D2; x<=D13; x++){
-    pinMode(x, OUTPUT);
-    digitalWrite(x, 0);
-  }
-  for(int x=A0; x<=A7; x++){
-    pinMode(x, OUTPUT);
-    digitalWrite(x, 0);
-  }
-
-  pinMode(PC6, INPUT_PULLUP);
-  PMX2 |= 0b10000000;
-  PMX2 |= 1;
-  PCICR |= (1<<PCIE1);
-  PCMSK1 |= (1<<PCINT14);
-
-  Serial.begin(115200, SERIAL_8N1);
-
-  // setup ambient light sensor
-  pinMode(A0, INPUT_PULLUP);
-  analogReference(DEFAULT);
-
-  Serial.println("Started:");
+ pinMode(LED_BUILTIN, OUTPUT);
+ delay(3000);
+ Serial.begin(115200);
+ Serial.println();
+ Serial.print("Configuring access point...");
+ WiFi.begin(ssid, password);
+ int x=0;
+ while (WiFi.status() != WL_CONNECTED) {
+   delay(500);
+   Serial.print(".");
+   if(++x>20)break;
+ }
+ Serial.println("");
+ Serial.println("WiFi connected");
+ Serial.println("IP address: ");
+ Serial.println(WiFi.localIP());
+ server.on ( "/", handleRoot );
+ server.on ("/save", handleSave);
+ server.begin();
+ Serial.println ( "HTTP server started" );
+ server.on("/LED_BUILTIN_on", []() {
+   digitalWrite(LED_BUILTIN, 1);
+   Serial.println("on");
+   handleRoot();
+ });
+ server.on("/LED_BUILTIN_off", []() {
+   digitalWrite(LED_BUILTIN, 0);
+   Serial.println("off");
+   handleRoot();
+ });
 }
-
-bool DEBUG = false;
-char pc_int_cnt = 0;
-unsigned long last_press = 0;
-ISR(PCINT1_vect){
-  cli();
-  if((++pc_int_cnt)&1)
-    last_press = millis();
-  else{
-    if(millis()-last_press>1000){  // long-click restore RESET button
-      PCICR &= ~(1<<PCIE1);
-      PCMSK1 &= ~(1<<PCINT14);
-      PMX2 |= 0b10000000;
-      PMX2 &= ~1;
-      pinMode(PC6, OUTPUT);
-    }
-    DEBUG = !DEBUG;
-  }
-  sei();
-}
-
-void loop(){
-    int val = readAvgVolt(A0);
-    Serial.println(val);
-    if(val>2000){
-      digitalWrite(D3, 1);
-      digitalWrite(LED_BUILTIN, 1);
-    }else{
-      digitalWrite(D3, 0);
-      digitalWrite(LED_BUILTIN, 0);
-    }
-    Serial.println(DEBUG?"DEBUG is on":"DEBUG is off");
-    delay(1000);
-}
+void loop() {
+ server.handleClient();
+} 

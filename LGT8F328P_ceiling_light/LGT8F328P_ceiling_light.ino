@@ -96,6 +96,7 @@ void setup() {
   analogReference(DEFAULT);
   
   Serial.begin(115200);
+  Serial.setTimeout(1000);  
   Serial.print("\nSystem initialized, light sensor = ");
   Serial.println(readAvgVolt(A0));
   Serial.println("Press RESET button to toggle DEBUG/verbose mode; long-press RESET to restore reset functionality.");
@@ -226,9 +227,9 @@ void loop() {
   sensor_on();
   is_light_on = false;
   // reset timer0 counter
-  noInterrupts ();
-  timer0_millis = 0;
-  interrupts ();
+  // noInterrupts ();
+  // timer0_millis = 0;
+  // interrupts ();
   delay(30000); // wait for sensor to stabilize
   while(Serial.available())
     Serial.readStringUntil('\n');
