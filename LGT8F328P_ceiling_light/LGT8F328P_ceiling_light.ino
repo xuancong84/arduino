@@ -13,9 +13,9 @@
 #define DELAY_ON_MOV  30000
 #define DELAY_ON_OCC  20000
 #define OCC_TRIG_TH  65530
-#define OCC_CONT_TH  500
+#define OCC_CONT_TH  400
 #define MOV_TRIG_TH  500
-#define MOV_CONT_TH  250
+#define MOV_CONT_TH  200
 #define CHECK_INTERVAL  125   // N*0.032 sec
 
 uint16_t adc_value;
@@ -156,7 +156,7 @@ int parse_output_value(String s){
 
 void loop() {
   // A. check light sensor
-  if(readAvgVolt(A0)<LIGHT_TH_HIGH){
+  if(readAvgVolt(A0)<LIGHT_TH_HIGH && false){
     if(DEBUG){
         Serial.println("Entering sleep ...");
         Serial.flush();
@@ -221,6 +221,15 @@ void loop() {
       Serial.flush();
     }
   }
+
+  if(readAvgVolt(A0)<LIGHT_TH_HIGH){
+    sensor_off();
+    do{
+      delay(4000);
+      if(DEBUG)
+        digitalWrite(LED_BUILTIN, (++sleep_cnter)&1);
+    }while(readAvgVolt(A0)<LIGHT_TH_HIGH);
+  }    
 
 
   // B. enter dark mode
