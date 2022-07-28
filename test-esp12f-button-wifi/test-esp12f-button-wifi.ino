@@ -7,7 +7,7 @@ bool state = false;
 
 /* Set these to your desired credentials. */
 const char *ssid = "WXC";                 //Enter your WIFI ssid
-const char *password = "***";  //Enter your WIFI password
+const char *password = "****";  //Enter your WIFI password
 ESP8266WebServer server(80);
 void handleRoot() {
   server.send(200, "text/html", String(state?"LED is on<br>":"LED is off<br>")+
@@ -37,8 +37,10 @@ void IRAM_ATTR handleInterrupt() {
 void setup() {
   delay(1000);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BUILTIN_AUX, OUTPUT);
   pinMode(FlashButtonPIN, INPUT_PULLUP);
   pinMode(D1, OUTPUT);
+  digitalWrite(LED_BUILTIN_AUX, true);
   attachInterrupt(digitalPinToInterrupt(FlashButtonPIN), handleInterrupt, FALLING);
   
   delay(1000);
@@ -53,6 +55,7 @@ void setup() {
     Serial.print(".");
     if(++x%32==0)Serial.println();
   }
+  digitalWrite(LED_BUILTIN_AUX, false);
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
