@@ -13,9 +13,9 @@
 #define DELAY_ON_MOV  30000
 #define DELAY_ON_OCC  20000
 #define OCC_TRIG_TH  65530
-#define OCC_CONT_TH  400
+#define OCC_CONT_TH  500
 #define MOV_TRIG_TH  500
-#define MOV_CONT_TH  200
+#define MOV_CONT_TH  250
 #define CHECK_INTERVAL  125   // N*0.032 sec
 
 uint16_t adc_value;
@@ -36,12 +36,17 @@ void tx_to_pd6(char *str){
 }
 
 void sensor_on(){
-  HDR = 1;
-  digitalWrite(D5, 1);
+  // pinMode(D5, INPUT);
+  // pinMode(D6, INPUT);
+  HDR = 3;
+  PORTD |= 0b01100000;
+  // digitalWrite(D5, 1);
+  // digitalWrite(D5, 1);
 }
 
 void sensor_off(){
-  digitalWrite(D5, 0);
+  // digitalWrite(D5, 0);
+  PORTD &= 0b10011111;
   HDR = 0;
 }
 
@@ -72,8 +77,8 @@ int readAvgVolt(int pin){
 
 void setup() {
   // 0. Initialize
-  delay(200); // avoid soft brick
-  
+  delay(500); // avoid soft brick
+
   // avoid floating ports
   for(int x=D2; x<=D13; x++){
     pinMode(x, OUTPUT);
@@ -83,6 +88,11 @@ void setup() {
     pinMode(x, OUTPUT);
     digitalWrite(x, 0);
   }
+
+  // prevent PD6 from OC0A
+  TCCR0B |= (1<<OC0AS);
+  TCCR0B |= (1<<DTEN0);
+  TCCR0A &= 0b00111111;
 
   // reuse RESET button as toggle DEBUG mode
   pinMode(PC6, INPUT_PULLUP);
@@ -155,80 +165,90 @@ int parse_output_value(String s){
 }
 
 void loop() {
-  // A. check light sensor
-  if(readAvgVolt(A0)<LIGHT_TH_HIGH && false){
+  // // A. check light sensor
+  // if(readAvgVolt(A0)<LIGHT_TH_HIGH){
+  //   if(DEBUG){
+  //       Serial.println("Entering sleep ...");
+  //       Serial.flush();
+  //   }
+  //   // enter slow clock
+  //   char old_PMCR = PMCR;
+
+  //   PMCR = 0b10000000;
+  //   PMCR = 0b01010010;
+
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+
+  //   PRR = 0b10101110;
+  //   PRR1 = 0b00101100;
+
+  //   // setup Timer2 interrupt every 4 sec
+  //   cli();
+  //   OCR2A = CHECK_INTERVAL;
+  //   TCNT2 = 0;
+  //   TCCR2A = 0b00000010;
+  //   TCCR2B = 0b00000111;
+  //   TIMSK2 = 0b00000010;
+  //   ASSR = 0b10100000;
+  //   while(ASSR&0b00011111);
+  //   sei();
+
+  //   // sleep check
+  //   do{
+  //     SMCR = 0b00000111;
+  //     sleep_cpu();
+  //     if(DEBUG)
+  //       digitalWrite(LED_BUILTIN, (++sleep_cnter)&1);
+  //   }while(readAvgVolt(A0)<LIGHT_TH_HIGH);
+
+  //   if(DEBUG)
+  //     digitalWrite(LED_BUILTIN, 0);
+
+  //   // return to fast clock
+  //   TIMSK2 = 0;
+  //   PMCR = 0b10000000;
+  //   PMCR = old_PMCR;
+
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+  //   NOP;
+
+  //   PRR=PRR1=0;
+  //   if(DEBUG){
+  //     Serial.println("Exited sleep ...");
+  //     Serial.flush();
+  //   }
+  // }
+
+  light_off();
+  sensor_off();
+  if(readAvgVolt(A0)<LIGHT_TH_HIGH){
+    sensor_off();
     if(DEBUG){
         Serial.println("Entering sleep ...");
         Serial.flush();
     }
-    // enter slow clock
-    char old_PMCR = PMCR;
-
-    PMCR = 0b10000000;
-    PMCR = 0b01010010;
-
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-
-    PRR = 0b10101110;
-    PRR1 = 0b00101100;
-
-    // setup Timer2 interrupt every 4 sec
-    cli();
-    OCR2A = CHECK_INTERVAL;
-    TCNT2 = 0;
-    TCCR2A = 0b00000010;
-    TCCR2B = 0b00000111;
-    TIMSK2 = 0b00000010;
-    ASSR = 0b10100000;
-    while(ASSR&0b00011111);
-    sei();
-
-    // sleep check
-    do{
-      SMCR = 0b00000111;
-      sleep_cpu();
-      if(DEBUG)
-        digitalWrite(LED_BUILTIN, (++sleep_cnter)&1);
-    }while(readAvgVolt(A0)<LIGHT_TH_HIGH);
-
-    if(DEBUG)
-      digitalWrite(LED_BUILTIN, 0);
-
-    // return to fast clock
-    TIMSK2 = 0;
-    PMCR = 0b10000000;
-    PMCR = old_PMCR;
-
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-    NOP;
-
-    PRR=PRR1=0;
-    if(DEBUG){
-      Serial.println("Exited sleep ...");
-      Serial.flush();
-    }
-  }
-
-  if(readAvgVolt(A0)<LIGHT_TH_HIGH){
-    sensor_off();
     do{
       delay(4000);
       if(DEBUG)
         digitalWrite(LED_BUILTIN, (++sleep_cnter)&1);
     }while(readAvgVolt(A0)<LIGHT_TH_HIGH);
+    if(DEBUG){
+      Serial.println("Exited sleep ...");
+      Serial.flush();
+    }
   }    
 
 
