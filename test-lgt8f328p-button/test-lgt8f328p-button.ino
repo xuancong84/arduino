@@ -60,16 +60,24 @@ ISR(PCINT1_vect){
       PMX2 |= 0b10000000;
       PMX2 &= ~1;
       pinMode(PC6, OUTPUT);
+      Serial.println("RESET button function restored!");
+    }else{
+      state = !state;
+      for(int x=D2; x<=D13; x++)
+        digitalWrite(x, state);
+      for(int x=A0; x<=A7; x++)
+        digitalWrite(x, state);
+      Serial.print("LED = ");
+      Serial.println(state);
     }
-    state = !state;
-    for(int x=D2; x<=D13; x++)
-      digitalWrite(x, state);
-    for(int x=A0; x<=A7; x++)
-      digitalWrite(x, state);
   }
   sei();
 }
 
+int val = 0;
 void loop() {
-  delay(1000);
+  delay(200);
+  Serial.print(++val);
+  Serial.print(' ');
+  if(val%20==0)Serial.println();
 }
