@@ -8,65 +8,58 @@
 #include <WDT.h>
 #include <avr/sleep.h>
 
-
-bool state = false;
-
+#define n_pins 20
+int PINs[n_pins]={D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, A0, A1, A2, A3, A4, A5, A6, A7};
 void setup() {
   // 0. Initialize
   delay(1000); // avoid soft brick
 
   // avoid floating ports
-  for(int x=D2; x<=D13; x++){
-    pinMode(x, OUTPUT);
-    digitalWrite(x, 0);
-  }
-  for(int x=A0; x<=A7; x++){
-    pinMode(x, OUTPUT);
-    digitalWrite(x, 0);
+  for(int x=0; x<n_pins; x++){
+    pinMode(PINs[x], OUTPUT);
+    digitalWrite(PINs[x], 0);
   }
 
-  // setup D4 as DAC output, use internal reference 2.048V
+  // setup D4 as DAC output, use VCC as reference
   pinMode(D4, INPUT);
   DACON = 0b00001100;
 
   Serial.begin(115200);
-  Serial.println("\nSystem initialized, input interger between 0-255 for DAC output to D4 (-ve value to slide from 150 to it):");
+  Serial.println("\nSystem initialized, input interger between 0-255 for analogWrite() to all ports!");
+  Serial.println("DAC output to D4, PWM output to PD3 (490Hz) and PD5 (980Hz), digital output to PD2 (input ###-### to slide from ### to ###):");
   Serial.flush();
 }
 
-void smooth_to(int target) {
-  if(target<150){
-    analogWrite(DAC0, target);
-    analogWrite(D3, target);
-    analogWrite(D6, target);
-  }else for(int x=150; x<target; ++x){
-    analogWrite(DAC0, x);
-    analogWrite(D3, x);
-    analogWrite(D6, x);
-    delay(x>>2);
+void smooth_to(int from, int to) {
+  for(int val=from; val<=to; ++val){
+    for(int x=0; x<n_pins; x++)
+      analogWrite(PINs[x], val);
+    delay(100);
   }
 }
 
-char str[512];
 bool skip = false;
+char str[256];
 void loop() {
   if(Serial.available()){
-    int val = Serial.parseInt();
-    if(val>=255) val = 255;
-    if(!skip){
-      if(val<0){
-        Serial.print("DAC value smooth from 150 to ");
-        smooth_to(-val);
-        Serial.println(-val);
-      }else{
-        analogWrite(DAC0, val);
-        analogWrite(D3, val);
-        analogWrite(D6, val);
-        Serial.print("DAC value set to ");
-        Serial.println(val);
-      }
+    String s = Serial.readStringUntil('\n');
+    s.trim();
+    if(s.length()==0) return;
+    int posi = s.indexOf('-');
+    if(posi==-1){
+      int val = s.toInt();
+      for(int x=0; x<n_pins; x++)
+        analogWrite(PINs[x], val);
+      Serial.print("DAC value set to ");
+      Serial.println(val);
+    }else{
+      int val1 = s.substring(0, posi).toInt();
+      int val2 = s.substring(posi+1).toInt();
+      sprintf(str, "Smoothing DAC value from %d to %d ...", val1, val2);
+      Serial.print(str);
+      smooth_to(val1, val2);
+      Serial.println("Done");
     }
-    skip = !skip;
   } else
     delay(100);
 }
