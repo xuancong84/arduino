@@ -76,11 +76,26 @@ ISR(PCINT1_vect){
   sei();
 }
 
+void sensor_on(){
+  pinMode(D5, INPUT);
+  HDR = 1;
+  digitalWrite(D5, 1);
+}
+
+void sensor_off(){
+  digitalWrite(D5, 0);
+  HDR = 0;
+}
+
 void loop() {
   if(Serial.available()){
     String s = Serial.readStringUntil('\n');
     s.trim();
     if(s.length()==0) return;
+    if(s=="light_on"){digitalWrite(D9, 1);  return;}
+    if(s=="light_off"){digitalWrite(D9, 0); return;}
+    if(s=="sensor_on"){sensor_on();  return;}
+    if(s=="sensor_off"){sensor_off(); return;}
     int val = s.toInt();
     analogWrite(DAC0, val);
     Serial.print("DAC value set to ");
