@@ -15,6 +15,7 @@
 AsyncWebServer server(80);
 DNSServer *dnsServer = NULL;
 WiFiUDP *ntpUDP = NULL;
+WiFiUDP Udp;
 NTPClient *timeClient = NULL;
 float timezone = 8;
 int all_ports[] = {D0, D1, D2, D3, D4, D5, D6, D7, D8, A0};
@@ -155,8 +156,10 @@ void connect_wifi(String wifi_ssid, String wifi_password){
   }
 
   // Update time from Internet
+  delay(1000);
   initNTP();
   initServer();
+  Udp.begin(12345);
 }
 
 void setup() {
@@ -166,10 +169,18 @@ void setup() {
   Serial.begin(115200);
   delay(3000); // avoid soft brick
   Serial.printf("\nSystem started: %d ports in total\n", N_ports);
-  Serial.println("Command set: pinMode/set_high/set_low/set_value/digitalRead/analogRead/connect_wifi/hotspot/disconnect_wifi, port number can be 'all'");
+  Serial.println("Command set: pinMode/set_high/set_low/set_value/digitalRead/analogRead/connect_wifi/hotspot/disconnect_wifi/send_udp, port number can be 'all'");
   Serial.flush();
 
   digitalWrite(LED_BUILTIN, 1);
+}
+
+String get_pin(String name){
+  if(name!="all") return name;
+  String s;
+  for(int x=0;x<N_ports;x++) s += String(all_ports[x])+" ";
+  s.trim();
+  return s;
 }
 
 void loop() {
@@ -181,15 +192,16 @@ void loop() {
     delay(1);
     return;
   }
+  int sp;
   String s = Serial.readStringUntil('\n');
   s.trim();
 
   if(s.startsWith("pinMode ")){
-    String val1 = s.substring(s.indexOf(' '));
-    val1.trim();
-    int sp = val1.indexOf(' ');
-    String port_s = val1.substring(0, sp);
-    String mode_s = val1.substring(sp);
+    String val = s.substring(s.indexOf(' '));
+    val.trim();
+    if((sp=val.indexOf(' '))<0) return;
+    String port_s = val.substring(0, sp);
+    String mode_s = val.substring(sp);
     mode_s.trim();
     int mode_i=0;
     if(mode_s=="INPUT") mode_i=INPUT;
@@ -200,6 +212,7 @@ void loop() {
       for(int x=0;x<N_ports;x++) pinMode(all_ports[x], mode_i);
     else
       pinMode(port_s.toInt(), mode_i);
+    Serial.printf("PIN %s set to mode %d\n", get_pin(port_s).c_str(), mode_i);
   }else if(s.startsWith("set_high ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
@@ -207,6 +220,7 @@ void loop() {
       for(int x=0;x<N_ports;x++) digitalWrite(all_ports[x], 1);
     else
       digitalWrite(val.toInt(), 1);
+    Serial.printf("PIN %s set to high\n", get_pin(val).c_str());
   }else if(s.startsWith("set_low ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
@@ -214,17 +228,19 @@ void loop() {
       for(int x=0;x<N_ports;x++) digitalWrite(all_ports[x], 0);
     else
       digitalWrite(val.toInt(), 0);
+    Serial.printf("PIN %s set to low\n", get_pin(val).c_str());
   }else if(s.startsWith("set_value ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
-    int sp = val.indexOf(' ');
+    if((sp=val.indexOf(' '))<0) return;
     String pin_s = val.substring(0, sp);
     int pin = pin_s.toInt();
-    int value = val.substring(sp).toInt();
+    int value = val.substring(sp+1).toInt();
     if(pin_s=="all")
       for(int x=0;x<N_ports;x++) analogWrite(all_ports[x], value);
     else
       analogWrite(pin, value);
+    Serial.printf("PIN %s set to %d\n", get_pin(pin_s).c_str(), value);
   }else if(s.startsWith("digitalRead ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
@@ -236,7 +252,7 @@ void loop() {
   }else if(s.startsWith("connect_wifi ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
-    int sp = val.indexOf(' ');
+    if((sp=val.indexOf(' '))<0) return;
     String wifi_ssid = val.substring(0, sp);
     String wifi_password = val.substring(sp);
     wifi_ssid.trim();
@@ -251,6 +267,26 @@ void loop() {
     WiFi.disconnect(false, true);
     WiFi.mode(WIFI_OFF);
     Serial.println("Wifi disconnected and turned off!");
+  }else if(s.startsWith("send_udp ")){
+    String val = s.substring(s.indexOf(' '));
+    val.trim();
+    if((sp=val.indexOf(' '))<0) return;
+    String IP = val.substring(0, sp);
+    val = val.substring(sp);
+    val.trim();
+
+    if((sp=val.indexOf(' '))<0) return;
+    int port = val.substring(0, sp).toInt();
+    String msg = val.substring(sp);
+    msg.trim();
+
+    IPAddress ipa;
+    if(!ipa.fromString(IP)) return;
+
+    Udp.beginPacket(ipa, port);
+    Udp.write(msg.c_str());
+    int res = Udp.endPacket();
+    Serial.printf("UDP msg %s sent to IP=%s port=%d\n", res?"successfully":"failed to", IP.c_str(), port);
   }else
     Serial.println("Unknown command!");
 }
