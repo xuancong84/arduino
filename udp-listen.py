@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
-import socket
+import os,sys,socket
 
-UDP_IP = "192.168.50.158"
-UDP_PORT = 1234
+port = 1234
+try:
+	port = int(sys.argv[1])
+except:
+	pass
 
-sock = socket.socket(socket.AF_INET, # Internet
-                     socket.SOCK_DGRAM) # UDP
-sock.bind((UDP_IP, UDP_PORT))
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+sock.bind(('0.0.0.0', port))
+print(f'Bound to UDP 0.0.0.0:{port}')
 
 while True:
     data, addr = sock.recvfrom(1024) # buffer size is 1024 bytes

@@ -10,12 +10,13 @@
 #include <NTPClient.h>
 #include <DNSServer.h>
 #include <WiFiUdp.h>
+#include "ESPAsyncUDP.h"
 #include <md5.h>
 
 AsyncWebServer server(80);
 DNSServer *dnsServer = NULL;
 WiFiUDP *ntpUDP = NULL;
-WiFiUDP Udp;
+AsyncUDP Udp;
 NTPClient *timeClient = NULL;
 float timezone = 8;
 int all_ports[] = {D0, D1, D2, D3, D4, D5, D6, D7, D8, A0};
@@ -159,9 +160,22 @@ void connect_wifi(String wifi_ssid, String wifi_password){
   delay(1000);
   initNTP();
   initServer();
-  Udp.begin(12345);
 }
-
+void help(){
+  Serial.println(R"aa(Commands: <port> number can be 'all', [] means optional argument
+  help: print this manual
+  pinMode <port/int> <mode/int|str> : change pin mode
+  set_high <port/int> : digitalWrite 1 to <port>
+  set_low <port/int> : digitalWrite 0 to <port>
+  set_value <port/int> <value/int> : analogWrite <value> to <port>
+  connect_wifi <ssid> <password> : connect to WiFi
+  disconnect_wifi : disconnect WiFi
+  wifi_sleep : WiFi.forceSleepBegin()
+  wifi_wake : WiFi.forceSleepWake()
+  hotspot [SSID=ArduinoTest] : create WiFi hotspot with SSID
+  udp_send <IP> <port> <msg>: send a UDP message
+  udp_bc <port> <msg>: broadcast a UDP message)aa");
+}
 void setup() {
   // 1. initialize serial comm
   pinMode(LED_BUILTIN, OUTPUT);
@@ -169,7 +183,7 @@ void setup() {
   Serial.begin(115200);
   delay(3000); // avoid soft brick
   Serial.printf("\nSystem started: %d ports in total\n", N_ports);
-  Serial.println("Command set: pinMode/set_high/set_low/set_value/digitalRead/analogRead/connect_wifi/hotspot/disconnect_wifi/send_udp, port number can be 'all'");
+  Serial.println("Command set: help/pinMode/set_high/set_low/set_value/digitalRead/analogRead/connect_wifi/hotspot/disconnect_wifi/wifi_sleep/wifi_wake/udp_send/udp_bc");
   Serial.flush();
 
   digitalWrite(LED_BUILTIN, 1);
@@ -196,7 +210,9 @@ void loop() {
   String s = Serial.readStringUntil('\n');
   s.trim();
 
-  if(s.startsWith("pinMode ")){
+  if(s.startsWith("help")){
+    help();
+  }else if(s.startsWith("pinMode ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
     if((sp=val.indexOf(' '))<0) return;
@@ -265,9 +281,14 @@ void loop() {
     hotspot(ssid);
   }else if(s.startsWith("disconnect_wifi")){
     WiFi.disconnect(false, true);
-    WiFi.mode(WIFI_OFF);
-    Serial.println("Wifi disconnected and turned off!");
-  }else if(s.startsWith("send_udp ")){
+    Serial.println("Wifi disconnected!");
+  }else if(s.startsWith("wifi_sleep")){
+    WiFi.forceSleepBegin();
+    Serial.println("Wifi force sleep begin!");
+  }else if(s.startsWith("wifi_wake")){
+    WiFi.forceSleepWake();
+    Serial.println("Wifi wakeup!");
+  }else if(s.startsWith("udp_send ")){
     String val = s.substring(s.indexOf(' '));
     val.trim();
     if((sp=val.indexOf(' '))<0) return;
@@ -283,10 +304,49 @@ void loop() {
     IPAddress ipa;
     if(!ipa.fromString(IP)) return;
 
-    Udp.beginPacket(ipa, port);
-    Udp.write(msg.c_str());
-    int res = Udp.endPacket();
-    Serial.printf("UDP msg %s sent to IP=%s port=%d\n", res?"successfully":"failed to", IP.c_str(), port);
+    AsyncUDPMessage udp_msg;
+    udp_msg.write((const uint8_t*)msg.c_str(), msg.length());
+
+    int res = Udp.sendTo(udp_msg, ipa, port);
+    Serial.printf("UDP msg (%d bytes) sent to IP=%s port=%d\n", res, IP.c_str(), port);
+  }else if(s.startsWith("udp_bc ")){
+    String val = s.substring(s.indexOf(' '));
+    val.trim();
+    if((sp=val.indexOf(' '))<0) return;
+    int port = val.substring(0, sp).toInt();
+    String msg = val.substring(sp);
+    msg.trim();
+
+    int res = Udp.broadcastTo(msg.c_str(), port);
+    Serial.printf("UDP msg (%d bytes) broadcast to 255.255.255.255:%d\n", msg.length(), port);
+  }else if(s.startsWith("udp_listen ")){
+    String val = s.substring(s.indexOf(' '));
+    val.trim();
+    int port = val.toInt();
+    if(Udp.listen(port)){
+      Udp.onPacket([](AsyncUDPPacket packet) {
+            Serial.print("UDP Packet Type: ");
+            Serial.print(packet.isBroadcast()?"Broadcast":packet.isMulticast()?"Multicast":"Unicast");
+            Serial.print(", From: ");
+            Serial.print(packet.remoteIP());
+            Serial.print(":");
+            Serial.print(packet.remotePort());
+            Serial.print(", To: ");
+            Serial.print(packet.localIP());
+            Serial.print(":");
+            Serial.print(packet.localPort());
+            Serial.print(", Length: ");
+            Serial.print(packet.length());
+            Serial.print(", Data: ");
+            Serial.write(packet.data(), packet.length());
+            Serial.println();
+            //reply to the client
+            packet.printf("Got %u bytes of data", packet.length());
+        });
+      Serial.printf("UDP listen on port %d successfully\n", port);
+    }else{
+      Serial.printf("UDP listen on port %d failed\n", port);
+    }
   }else
     Serial.println("Unknown command!");
 }
