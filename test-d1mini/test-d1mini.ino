@@ -111,8 +111,9 @@ void initServer(){
   server.on("/", handleRoot);
   server.on("/status", [](AsyncWebServerRequest *request) {request->send(200, "text/html", getFullDateTime());});
   server.onNotFound([](AsyncWebServerRequest *request){request->send(404, "text/plain", "Content not found.");});
+  AsyncElegantOTA.begin(&server);
   server.begin();
-  Serial.println("HTTP server started");
+  Serial.printf("HTTP server started with OTA update at http://%s/update", WiFi.localIP().toString().c_str());
 }
 
 void hotspot(String ssid){
@@ -174,7 +175,8 @@ void help(){
   wifi_wake : WiFi.forceSleepWake()
   hotspot [SSID=ArduinoTest] : create WiFi hotspot with SSID
   udp_send <IP> <port> <msg>: send a UDP message
-  udp_bc <port> <msg>: broadcast a UDP message)aa");
+  udp_bc <port> <msg>: broadcast a UDP message
+  uart_relay (<new_baud_rate>))aa");
 }
 void setup() {
   // 1. initialize serial comm
@@ -183,7 +185,7 @@ void setup() {
   Serial.begin(115200);
   delay(3000); // avoid soft brick
   Serial.printf("\nSystem started: %d ports in total\n", N_ports);
-  Serial.println("Command set: help/pinMode/set_high/set_low/set_value/digitalRead/analogRead/connect_wifi/hotspot/disconnect_wifi/wifi_sleep/wifi_wake/udp_send/udp_bc");
+  Serial.println("Command set: help/pinMode/set_high/set_low/set_value/digitalRead/analogRead/connect_wifi/hotspot/disconnect_wifi/wifi_sleep/wifi_wake/udp_send/udp_bc/uart_relay");
   Serial.flush();
 
   digitalWrite(LED_BUILTIN, 1);
@@ -223,6 +225,7 @@ void loop() {
     if(mode_s=="INPUT") mode_i=INPUT;
     else if(mode_s=="OUTPUT") mode_i=OUTPUT;
     else if(mode_s=="INPUT_PULLUP") mode_i=INPUT_PULLUP;
+    else if(mode_s=="OUTPUT_OPEN_DRAIN") mode_i=OUTPUT_OPEN_DRAIN;
     else mode_i = mode_s.toInt();
     if(port_s=="all")
       for(int x=0;x<N_ports;x++) pinMode(all_ports[x], mode_i);
@@ -346,6 +349,21 @@ void loop() {
       Serial.printf("UDP listen on port %d successfully\n", port);
     }else{
       Serial.printf("UDP listen on port %d failed\n", port);
+    }
+  }else if(s.startsWith("uart_relay")){
+    int posi = s.indexOf(' ');
+    if(posi>0){
+      String val = s.substring(s.indexOf(' '));
+      val.trim();
+      int baudrate = val.toInt();
+      Serial.flush();
+      Serial.begin(baudrate);
+    }
+    while(1){
+      s = Serial.readStringUntil('\n');
+      s.trim();
+      if(!s.isEmpty())
+        Serial.println(s);
     }
   }else
     Serial.println("Unknown command!");
